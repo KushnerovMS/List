@@ -1,10 +1,10 @@
 CC=g++
-include /home/kms/Cprojects/Cflags
+CFLAGS=-Wall
 LDFLAGS=
-SOURCES=main.cpp FileWork.cpp RuCtype.cpp Sorting.cpp String.cpp UTF-8.cpp
+SOURCES=main.cpp List.cpp	
 OBJDIR =./.obj
 OBJECTS=$(addprefix $(OBJDIR)/, $(SOURCES:.cpp=.o))
-EXECUTABLE=Onegin
+EXECUTABLE=List
 EXEDIR=./bin
 
 
