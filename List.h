@@ -7,6 +7,17 @@ const char CANARY = 21;
 
 typedef struct
 {
+    unsigned int allocationError : 1;
+    unsigned int dataNullPtr     : 1;
+    unsigned int nextNullPtr     : 1;
+    unsigned int prevNullPtr     : 1;
+    unsigned int listDamaged     : 1;
+    unsigned int emptyCell       : 1;
+} ListError;
+const ListError NULL_LIST_ERROR = {};
+
+typedef struct
+{
     char beginCanary;
 
     int* data;
@@ -15,28 +26,34 @@ typedef struct
 
     unsigned int capacity;
 
+//    unsigned int curentIndex;
+
+    ListError err;
+
     char endCanary;
 } List;
 
-typedef struct
-{
-    unsigned int allocationError : 1; 
-    unsigned int listNullPtr     : 1;
-    unsigned int dataNullPtr     : 1;
-    unsigned int nextNullPtr     : 1;
-    unsigned int prevNullPtr     : 1;
-    unsigned int listDamaged     : 1;
-    unsigned int outOfSize       : 1;
-} ListError;
 
-List*     ListCtr    (unsigned int capacity, ListError* err = nullptr);
-ListError ListInsert (List* list, unsigned int index, int data);
-ListError ListDelete (List* list, unsigned int index);
-ListError ListDtr    (List* list);
-void      ListErrPrint (ListError err, FILE* file = nullptr);
-int*      getItem    (List* list, unsigned int index, ListError* err = nullptr);
-bool      ListOk     (List* list, ListError* err = nullptr);
-int       _getFreeCell (List* list);
-int       _getCellOfItem (List* list, unsigned int index, bool* outOfSize = nullptr);
+List*     ListCtr        (unsigned int capacity, ListError* err = nullptr);
+ListError ListDtr        (List* list);
+
+int       ListInsert     (List* list, int data, unsigned int index);
+int       ListAdd        (List* list, int data);
+int       ListDelete     (List* list, unsigned int index);
+
+int       ListSet        (List* list, int data, unsigned int index);
+int       ListGet        (List* list, unsigned int index);
+
+//int       ListNext       (List* list);
+//int       ListPrev       (List* list);
+
+//int       ListToBegin    (List* list);
+//int       ListToEnd      (List* list);
+
+void      ListErrPrint   (ListError err, FILE* file = nullptr);
+bool      ListOk         (List* list);
+int       _getFreeCell   (List* list);
+
+int       SlowSlowVerySlow_ThereIsNoSenseToCallMe_ThinkHarder_LogicalIndexToPhysicalIndex (List* list, unsigned int logicalIndex);
 
 #endif

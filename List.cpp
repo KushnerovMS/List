@@ -6,10 +6,9 @@
 
 List* ListCtr (unsigned int capacity, ListError* err)
 {
+    
     if (err)
-    {
-        err = {};
-    }
+        *err = NULL_LIST_ERROR;
     
 
     List* list = (List*) calloc (1, sizeof (List));
@@ -42,83 +41,15 @@ List* ListCtr (unsigned int capacity, ListError* err)
     list -> beginCanary = CANARY;
     list -> endCanary = CANARY;
 
+    if (err) list -> err = *err;
+
     return list;
-}
-
-ListError ListInsert (List* list, unsigned int index, int data)
-{
-    ListError err = {};
-    if (!ListOk (list, &err))
-        return err;
-
-    int free = _getFreeCell (list);
-
-    list -> data [free] = data;
-
-    bool outOfSize = 0;
-    int cell = _getCellOfItem (list, index, &outOfSize);
-    
-    if (!outOfSize)
-    {
-        list -> next[list -> prev[cell]] = free;
-        list -> prev[free] = list -> prev[cell];
-
-        list -> next[free] = cell;
-        list -> prev[cell] = free;
-    }
-    else
-    {
-        list -> next[cell] = free;
-        list -> prev[free] = cell;
-        list -> next[free] = 0;
-    }
-
-    return err;
-}
-
-ListError ListDelite (List* list, int index)
-{
-    ListError err = {};
-    if (!ListOk (list, &err))
-        return err;
-
-    int cell = _getCellOfItem (list, index);
-
-    list -> next[list -> prev[cell]] = list -> next[cell]; 
-    if (list -> next[cell] != 0)
-        list -> prev[list -> next[cell]] = list -> prev[cell];
-
-    list -> prev[cell] = -1;
-    list -> next[cell] = -1;
-    list -> data[cell] = 0;
-
-    return err;
-}
-
-int* getItem (List* list, unsigned int index, ListError* err)
-{
-    if (!ListOk (list, err))
-        return nullptr;
-
-    bool outOfSize = 0;
-    int cell = _getCellOfItem (list, index, &outOfSize);
-
-    if (outOfSize)
-    {
-        if (err) err -> outOfSize = 1;
-        return nullptr; 
-    }
-
-    return list -> data + cell;
 }
 
 ListError ListDtr (List* list)
 {
-    ListError err = {};
-    if (!ListOk (list, &err))
-    {
-        return err;
-    }
+    if (!ListOk (list))
+        return list  -> err;
 
     memset (list -> data, 0, list -> capacity * sizeof (int));
     free (list -> data);
@@ -129,46 +60,231 @@ ListError ListDtr (List* list)
     memset (list -> prev, 0, list -> capacity * sizeof (int));
     free (list -> prev);
 
-    list = {};
+
+    list -> beginCanary = 0;
+    list -> data = nullptr;
+    list -> next = nullptr;
+    list -> prev = nullptr;
+    list -> capacity = 0;
+    *((char*)&list -> err) = 0;
+    list -> endCanary = 0;
     free (list);
 
-    return err;
+    return list -> err;
 }
 
 
-bool ListOk (List* list, ListError* err)
+int ListInsert (List* list, int data, unsigned int index)
 {
-    bool ok = 1;
-    if (err) *err = {};
+    if (!ListOk (list))
+        return 0;
 
-    if (list == nullptr)
+
+    //if (index == 0) index = list -> curentIndex;
+
+    if (index == 0 || list -> next[index] < 0 || list -> prev[index] < 0)
     {
-        if (err) err -> listNullPtr = 1;
+        list -> err.emptyCell = 1;
         return 0;
     }
+
+    int free = _getFreeCell (list);
+    
+
+    list -> data [free] = data;
+
+    list -> next[list -> prev[index]] = free;
+    list -> prev[free] = list -> prev[index];
+
+    list -> next[free] = index;
+    list -> prev[index] = free;
+
+    return free;
+}
+
+int ListAdd (List* list, int data)
+{
+    if (!ListOk (list))
+        return 0;
+
+
+    int free = _getFreeCell (list);
+
+
+    list -> data [free] = data;
+
+    list -> next[list -> prev[0]] = free;
+    list -> prev[free] = list -> prev[0];
+
+    list -> next[free] = 0;
+    list -> prev[0] = free;
+
+    return free;
+
+}
+
+int ListDelete (List* list, int index)
+{
+    if (!ListOk (list))
+        return 0;
+
+/*
+    if (index == 0) index = list -> curentIndex;
+    if (list -> curentIndex == 0)
+        return 0;
+*/
+    if (index == 0 || list -> next[index] < 0 || list -> prev[index] < 0)
+    {
+        list -> err.emptyCell = 1;
+        return 0;
+    }
+
+    int newIndex;
+    if (list -> next[index] != 0)
+        newIndex = list -> next[index];
+    else
+        newIndex = list -> prev[index];
+/*
+    if (list -> curentIndex == index)
+        list -> curentIndex = newIndex;
+*/
+
+    list -> next[list -> prev[index]] = list -> next[index]; 
+    list -> prev[list -> next[index]] = list -> prev[index];
+
+    list -> prev[index] = -1;
+    list -> next[index] = -1;
+    list -> data[index] = 0;
+
+    return newIndex;
+}
+
+
+int ListSet (List* list, int data, unsigned int index)
+{
+    if (!ListOk (list))
+        return 0;
+
+    //if (index == 0) index = list -> curentIndex;
+
+    if (index == 0 || list -> next[index] < 0 || list -> prev[index] < 0)
+    {
+        list -> err.emptyCell = 1;
+        return 0;
+    }
+
+    list -> data[index] = data;
+
+    return index;
+}
+
+int ListGet (List* list, unsigned int index = 0)
+{
+    if (!ListOk (list))
+        return 0;
+
+    //if (index == 0) index = list -> curentIndex;
+
+    if (index == 0 || list -> next[index] < 0 || list -> prev[index] < 0)
+    {
+        list -> err.emptyCell = 1;
+        return 0;
+    }
+
+    return list -> data[index];
+}
+
+
+/*
+int ListNext (List* list)
+{
+    if (!ListOk (list))
+        return 0;
+
+    if (list -> next[list -> curentIndex] == 0)
+        return 0;
+
+    if (list -> next[list -> curentIndex] < 0 || list -> prev[list -> curentIndex] < 0)
+    {
+        list -> err.emptyCell = 1;
+        return 0;
+    }
+
+    list -> curentIndex = list -> next[list -> curentIndex];
+        
+    return list -> curentIndex;
+}
+
+int ListPrev (List* list)
+{
+    if (!ListOk (list))
+        return 0;
+
+    if (list -> prev[list -> curentIndex] == 0)
+        return 0;
+
+    if (list -> next[list -> curentIndex] < 0 || list -> prev[list -> curentIndex] < 0)
+    {
+        list -> err.emptyCell = 1;
+        return 0;
+    }
+
+    list -> curentIndex = list -> prev[list -> curentIndex];
+        
+    return list -> curentIndex;
+}
+
+
+int ListToBegin (List* list)
+{
+    if (!ListOk (list))
+        return 0;
+    
+    list -> curentIndex = list -> next[0];
+
+    return list -> curentIndex; 
+}
+
+int ListToEnd (List* list)
+{
+    if (!ListOk (list))
+        return 0;
+    
+    list -> curentIndex = list -> prev[0];
+
+    return list -> curentIndex; 
+}
+*/
+
+bool ListOk (List* list)
+{
+    bool ok = 1;
+
+    assert (list);
+    assert (!*((char*)&list -> err) || !"Who am I write errors for?");
 
     if (list -> beginCanary != CANARY ||
         list -> endCanary   != CANARY)
     {
-        if (err) err -> listDamaged = 1;
+        list -> err.listDamaged = 1;
         return 0;
     }
 
     if (list -> data == nullptr)
     {
-        if (err) err -> dataNullPtr = 1;
+        list -> err.dataNullPtr = 1;
         ok = 0;
     }
     
     if (list -> next == nullptr)
     {
-        if (err) err -> nextNullPtr = 1;
+        list -> err.nextNullPtr = 1;
         ok = 0;
     }
 
     if (list -> prev == nullptr)
     {
-        if (err) err -> prevNullPtr = 1;
+        list -> err.prevNullPtr = 1;
         ok = 0;
     }
             
@@ -186,11 +302,6 @@ void ListErrPrint (ListError err, FILE* file)
     {
         ok = 0;
         fprintf (file, "ALLOCATION ERROR\n");
-    }
-    if (err.listNullPtr)
-    {
-        ok = 0;
-        fprintf (file, "LIST NULL POINTER\n");
     }
     if (err.dataNullPtr)
     {
@@ -212,11 +323,6 @@ void ListErrPrint (ListError err, FILE* file)
         ok = 0;
         fprintf (file, "LIST DAMAGED\n");
     }
-    if (err.outOfSize)
-    {
-        ok = 0;
-        fprintf (file, "OUT OF SIZE\n");
-    }
     
     if (ok)
         fprintf (file, "no errors\n");
@@ -232,19 +338,15 @@ int _getFreeCell (List* list)
     return index;
 }
 
-int _getCellOfItem (List* list, unsigned int index, bool* outOfSize)
+int SlowSlowVerySlow_ThereIsNoSenseToCallMe_ThinkHarder_LogicalIndexToPhysicalIndex (List* list, unsigned int logicalIndex)
 {
-    int cell = 0;
-    *outOfSize = 0;
-    for (unsigned int i = 0; i <= index; i ++)
-    {
-        if (list -> next[cell] == 0)
-        {
-            *outOfSize = 1;
-            break;
-        }
-        cell = list -> next[cell];
-    }
+    if (!ListOk (list))
+        return 0;
 
-    return cell;
+    int physicalIndex = list -> next[0];
+
+    while (logicalIndex -- > 0 || list -> next[physicalIndex] != 0)
+        physicalIndex = list -> next[physicalIndex];
+
+    return physicalIndex;
 }

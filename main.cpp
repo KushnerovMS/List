@@ -10,5 +10,6 @@ int main ()
 
     err = ListDtr (list);
     ListErrPrint (err);
+
     return 0;
 }
