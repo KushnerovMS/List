@@ -30,18 +30,20 @@ List* ListCtr (unsigned int capacity, ListError* err)
         return nullptr;
     }
 
-    for (unsigned i = 1; i < capacity; i ++)
+    for (unsigned int i = 1; i < capacity; i ++)
     {
-        list -> next[i] = -1;
+        list -> next[i] = -(i + 1);
         list -> prev[i] = -1;
     }
+    list -> next[capacity - 1] = 0;
 
+    list -> free = 1;
     list -> capacity = capacity;
 
     list -> beginCanary = CANARY;
     list -> endCanary = CANARY;
 
-    if (err) list -> err = *err;
+    if (err) list -> err = NULL_LIST_ERROR;
 
     return list;
 }
@@ -65,6 +67,7 @@ ListError ListDtr (List* list)
     list -> data = nullptr;
     list -> next = nullptr;
     list -> prev = nullptr;
+    list -> free = 0;
     list -> capacity = 0;
     *((char*)&list -> err) = 0;
     list -> endCanary = 0;
@@ -88,7 +91,8 @@ int ListInsert (List* list, int data, unsigned int index)
         return 0;
     }
 
-    int free = _getFreeCell (list);
+    int free = list -> free;
+    list -> free = - list -> next[free];
     
 
     list -> data [free] = data;
@@ -108,7 +112,8 @@ int ListAdd (List* list, int data)
         return 0;
 
 
-    int free = _getFreeCell (list);
+    int free = list -> free;
+    list -> free = - list -> next[list -> free];
 
 
     list -> data [free] = data;
@@ -123,7 +128,7 @@ int ListAdd (List* list, int data)
 
 }
 
-int ListDelete (List* list, int index)
+int ListDelete (List* list, unsigned int index)
 {
     if (!ListOk (list))
         return 0;
@@ -152,9 +157,11 @@ int ListDelete (List* list, int index)
     list -> next[list -> prev[index]] = list -> next[index]; 
     list -> prev[list -> next[index]] = list -> prev[index];
 
+    list -> next[index] = - list -> free;
     list -> prev[index] = -1;
-    list -> next[index] = -1;
     list -> data[index] = 0;
+
+    list -> free = index;
 
     return newIndex;
 }
@@ -256,12 +263,70 @@ int ListToEnd (List* list)
 }
 */
 
+bool ListDump (List* list)
+{
+    system ("mkdir -p ./dump");
+    FILE* file = (FILE*) fopen ("./dump/test.dot", "w");
+
+    fprintf (file, "digraph G{\n");
+
+    fprintf (file, "graph [rankdir = LR];\
+                    edge [weight = 100, minlen = 2];\n"); 
+
+    for (int i = 0; i < list -> capacity; i ++)
+    {
+        fprintf (file, "subgraph cluster%d                          \
+                        {                                           \
+                            style = \"filled, rounded\";            \
+                            fillcolor = \"#b0ffb0\";                \
+                            color = \"#b0ffb0\";                    \
+                                                                    \
+                            label = \"%d\"                          \
+                                                                    \
+                            item%d                                  \
+                            [                                       \
+                                style = \"rounded, filled\",        \
+                                fillcolor = \"#ffffff\",            \
+                                shape = \"record\",                 \
+                                label = \"<addr> addr: %d |         \
+                                          <next> next: %d |         \
+                                          <prev> prev: %d |         \
+                                          <data> data: %d\"         \
+                            ];                                      \
+                        }\n", i, i, i, i, list -> next[i], list -> prev[i], list -> data[i]);
+        if (i + 1 < list -> capacity)
+            fprintf (file, "item%d -> item%d [style = invis];\n", i, i + 1);
+    }
+
+    fprintf (file, "edge [weight = 1, minlen = 0];\n");
+
+    for (int i = 0; i < list -> capacity; i ++)
+    {
+        if (list -> next[i] >= 0)
+            fprintf (file, "item%d : next -> item%d : addr;\n", i, list -> next[i]);
+        else
+            fprintf (file, "item%d : next -> item%d : addr;\n", i, - list -> next[i]);
+
+        if (list -> prev[i] >= 0)
+            fprintf (file, "item%d : prev -> item%d : addr;\n", i, list -> prev[i]);
+    }
+
+
+    fprintf (file, "}\n");
+
+    fclose (file);
+
+    system ("dot ./dump/test.dot -T svg -o ./dump/test.svg");
+
+
+    return 1;
+}
+
 bool ListOk (List* list)
 {
     bool ok = 1;
 
     assert (list);
-    assert (!*((char*)&list -> err) || !"Who am I write errors for?");
 
     if (list -> beginCanary != CANARY ||
         list -> endCanary   != CANARY)
@@ -325,15 +390,17 @@ void ListErrPrint (ListError err, FILE* file)
     }
     
     if (ok)
-        fprintf (file, "no errors\n");
+        fprintf (stdout, "no errors\n");
 }
 
 int _getFreeCell (List* list)
 {
     unsigned int index = 0;
 
-    while (index < list -> capacity || list -> prev[index] != -1)
+    while (index < list -> capacity && list -> prev[index] != -1)
+    {
         index ++;
+    }
 
     return index;
 }

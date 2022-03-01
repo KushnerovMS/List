@@ -14,6 +14,7 @@ typedef struct
     unsigned int listDamaged     : 1;
     unsigned int emptyCell       : 1;
 } ListError;
+
 const ListError NULL_LIST_ERROR = {};
 
 typedef struct
@@ -23,6 +24,8 @@ typedef struct
     int* data;
     int* next;
     int* prev;
+
+    int free;
 
     unsigned int capacity;
 
@@ -51,6 +54,7 @@ int       ListGet        (List* list, unsigned int index);
 //int       ListToEnd      (List* list);
 
 void      ListErrPrint   (ListError err, FILE* file = nullptr);
+bool      ListDump       (List* list);
 bool      ListOk         (List* list);
 int       _getFreeCell   (List* list);
 
