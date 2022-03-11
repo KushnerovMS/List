@@ -5,7 +5,7 @@
 int main ()
 {
     ListError err = {};
-    List* list = ListCtr (100, &err);
+    List* list = ListCtr (1, &err);
     ListErrPrint (list -> err);
     
 
@@ -13,6 +13,8 @@ int main ()
     ListErrPrint (list -> err);
     ListAdd (list, 20);
     ListAdd (list, 30);
+
+
     ListAdd (list, 40);
     ListAdd (list, 50);
 
@@ -23,9 +25,7 @@ int main ()
 
     ListErrPrint (list -> err);
 
-
     ListDump (list);
-
 
     err = ListDtr (list);
     ListErrPrint (err);

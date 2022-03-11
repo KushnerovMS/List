@@ -4,7 +4,7 @@
 
 #include "List.h"
 
-List* ListCtr (unsigned int capacity, ListError* err)
+List* ListCtr (int capacity, ListError* err)
 {
     
     if (err)
@@ -18,9 +18,9 @@ List* ListCtr (unsigned int capacity, ListError* err)
         return nullptr;
     }
 
-    list -> data = (int*) calloc (capacity, sizeof (int));
-    list -> next = (int*) calloc (capacity, sizeof (int)); 
-    list -> prev = (int*) calloc (capacity, sizeof (int)); 
+    list -> data = (data_t*) calloc (capacity + 1, sizeof (data_t));
+    list -> next = (int*) calloc (capacity + 1, sizeof (int)); 
+    list -> prev = (int*) calloc (capacity + 1, sizeof (int)); 
 
     if (list -> data == nullptr ||
         list -> next == nullptr ||
@@ -30,15 +30,16 @@ List* ListCtr (unsigned int capacity, ListError* err)
         return nullptr;
     }
 
-    for (unsigned int i = 1; i < capacity; i ++)
+    for (int i = 1; i < capacity + 1; i ++)
     {
         list -> next[i] = -(i + 1);
         list -> prev[i] = -1;
     }
-    list -> next[capacity - 1] = 0;
+    list -> next[capacity] = 0;
 
     list -> free = 1;
     list -> capacity = capacity;
+    list -> size = 0;
 
     list -> beginCanary = CANARY;
     list -> endCanary = CANARY;
@@ -53,7 +54,7 @@ ListError ListDtr (List* list)
     if (!ListOk (list))
         return list  -> err;
 
-    memset (list -> data, 0, list -> capacity * sizeof (int));
+    memset (list -> data, 0, list -> capacity * sizeof (data_t));
     free (list -> data);
 
     memset (list -> next, 0, list -> capacity * sizeof (int));
@@ -62,28 +63,30 @@ ListError ListDtr (List* list)
     memset (list -> prev, 0, list -> capacity * sizeof (int));
     free (list -> prev);
 
+    ListError save = list -> err;
 
     list -> beginCanary = 0;
     list -> data = nullptr;
     list -> next = nullptr;
     list -> prev = nullptr;
     list -> free = 0;
-    list -> capacity = 0;
-    *((char*)&list -> err) = 0;
-    list -> endCanary = 0;
+    list -> capacity = -1;
+    list -> err = NULL_LIST_ERROR;
+    list -> endCanary = -1;
     free (list);
 
-    return list -> err;
+    return save;
 }
 
 
-int ListInsert (List* list, int data, unsigned int index)
+int ListInsert (List* list, data_t data, int index)
 {
     if (!ListOk (list))
         return 0;
 
+    if (list -> size == list -> capacity && _listResize (list) == 0)
+        return 0;
 
-    //if (index == 0) index = list -> curentIndex;
 
     if (index == 0 || list -> next[index] < 0 || list -> prev[index] < 0)
     {
@@ -103,14 +106,20 @@ int ListInsert (List* list, int data, unsigned int index)
     list -> next[free] = index;
     list -> prev[index] = free;
 
+    list -> size ++;
+
     return free;
 }
 
-int ListAdd (List* list, int data)
+int ListAdd (List* list, data_t data)
 {
     if (!ListOk (list))
         return 0;
 
+    if (list -> size == list -> capacity && _listResize (list) == 0)
+        return 0;
+
+    printf ("ListAdd\n");
 
     int free = list -> free;
     list -> free = - list -> next[list -> free];
@@ -124,20 +133,20 @@ int ListAdd (List* list, int data)
     list -> next[free] = 0;
     list -> prev[0] = free;
 
-    return free;
+    list -> size ++;
 
+
+    return free;
 }
 
-int ListDelete (List* list, unsigned int index)
+int ListDelete (List* list, int index)
 {
     if (!ListOk (list))
         return 0;
 
-/*
-    if (index == 0) index = list -> curentIndex;
-    if (list -> curentIndex == 0)
+    if (_listResize (list) == 0)
         return 0;
-*/
+
     if (index == 0 || list -> next[index] < 0 || list -> prev[index] < 0)
     {
         list -> err.emptyCell = 1;
@@ -149,10 +158,6 @@ int ListDelete (List* list, unsigned int index)
         newIndex = list -> next[index];
     else
         newIndex = list -> prev[index];
-/*
-    if (list -> curentIndex == index)
-        list -> curentIndex = newIndex;
-*/
 
     list -> next[list -> prev[index]] = list -> next[index]; 
     list -> prev[list -> next[index]] = list -> prev[index];
@@ -163,16 +168,17 @@ int ListDelete (List* list, unsigned int index)
 
     list -> free = index;
 
+    list -> size --;
+
     return newIndex;
 }
 
 
-int ListSet (List* list, int data, unsigned int index)
+int ListSet (List* list, data_t data, int index)
 {
     if (!ListOk (list))
         return 0;
 
-    //if (index == 0) index = list -> curentIndex;
 
     if (index == 0 || list -> next[index] < 0 || list -> prev[index] < 0)
     {
@@ -185,12 +191,11 @@ int ListSet (List* list, int data, unsigned int index)
     return index;
 }
 
-int ListGet (List* list, unsigned int index = 0)
+data_t ListGet (List* list, int index)
 {
     if (!ListOk (list))
         return 0;
 
-    //if (index == 0) index = list -> curentIndex;
 
     if (index == 0 || list -> next[index] < 0 || list -> prev[index] < 0)
     {
@@ -202,78 +207,17 @@ int ListGet (List* list, unsigned int index = 0)
 }
 
 
-/*
-int ListNext (List* list)
-{
-    if (!ListOk (list))
-        return 0;
-
-    if (list -> next[list -> curentIndex] == 0)
-        return 0;
-
-    if (list -> next[list -> curentIndex] < 0 || list -> prev[list -> curentIndex] < 0)
-    {
-        list -> err.emptyCell = 1;
-        return 0;
-    }
-
-    list -> curentIndex = list -> next[list -> curentIndex];
-        
-    return list -> curentIndex;
-}
-
-int ListPrev (List* list)
-{
-    if (!ListOk (list))
-        return 0;
-
-    if (list -> prev[list -> curentIndex] == 0)
-        return 0;
-
-    if (list -> next[list -> curentIndex] < 0 || list -> prev[list -> curentIndex] < 0)
-    {
-        list -> err.emptyCell = 1;
-        return 0;
-    }
-
-    list -> curentIndex = list -> prev[list -> curentIndex];
-        
-    return list -> curentIndex;
-}
-
-
-int ListToBegin (List* list)
-{
-    if (!ListOk (list))
-        return 0;
-    
-    list -> curentIndex = list -> next[0];
-
-    return list -> curentIndex; 
-}
-
-int ListToEnd (List* list)
-{
-    if (!ListOk (list))
-        return 0;
-    
-    list -> curentIndex = list -> prev[0];
-
-    return list -> curentIndex; 
-}
-*/
-
 bool ListDump (List* list)
 {
     system ("mkdir -p ./dump");
-    FILE* file = (FILE*) fopen ("./dump/test.dot", "w");
+    FILE* file = fopen ("./dump/test.dot", "w");
 
     fprintf (file, "digraph G{\n");
 
     fprintf (file, "graph [rankdir = LR];\
                     edge [weight = 100, minlen = 2];\n"); 
 
-    for (int i = 0; i < list -> capacity; i ++)
+    for (int i = 0; i < list -> capacity + 1; i ++)
     {
         fprintf (file, "subgraph cluster%d                          \
                         {                                           \
@@ -294,13 +238,13 @@ bool ListDump (List* list)
                                           <data> data: %d\"         \
                             ];                                      \
                         }\n", i, i, i, i, list -> next[i], list -> prev[i], list -> data[i]);
-        if (i + 1 < list -> capacity)
+        if (i + 1 < list -> capacity + 1)
             fprintf (file, "item%d -> item%d [style = invis];\n", i, i + 1);
     }
 
     fprintf (file, "edge [weight = 1, minlen = 0];\n");
 
-    for (int i = 0; i < list -> capacity; i ++)
+    for (int i = 0; i < list -> capacity + 1; i ++)
     {
         if (list -> next[i] >= 0)
             fprintf (file, "item%d : next -> item%d : addr;\n", i, list -> next[i]);
@@ -311,6 +255,7 @@ bool ListDump (List* list)
             fprintf (file, "item%d : prev -> item%d : addr;\n", i, list -> prev[i]);
     }
 
+    fprintf (file, "free -> item%d\n", list -> free);
 
     fprintf (file, "}\n");
 
@@ -388,21 +333,81 @@ void ListErrPrint (ListError err, FILE* file)
         ok = 0;
         fprintf (file, "LIST DAMAGED\n");
     }
+    if (err.emptyCell)
+    {
+        ok = 0;
+        fprintf (file, "EMPTY SELL\n");
+    }
+    if (err.maxSizeReached)
+    {
+        ok = 0;
+        fprintf (file, "MAX SIZE REACHED\n");
+    }
+    
     
     if (ok)
         fprintf (stdout, "no errors\n");
 }
 
-int _getFreeCell (List* list)
+int _listResize (List* list)
 {
-    unsigned int index = 0;
+    int newCapacity = list -> capacity;
 
-    while (index < list -> capacity && list -> prev[index] != -1)
+    printf ("%i ", newCapacity);
+
+    if (list -> size >= list -> capacity)
     {
-        index ++;
+        if (list -> capacity >= MAX_CAPACITY)
+        {
+            list -> err.maxSizeReached = 1;
+            return 0;
+        }
+
+        if (newCapacity == 1)
+            newCapacity = 2;
+        newCapacity *= 2 * (1 - 0.5 * newCapacity / MAX_CAPACITY);
+
+        if (newCapacity == list -> capacity)
+            newCapacity = MAX_CAPACITY;
+    }
+    else
+    {
+        while (list -> size < newCapacity / 3)
+            newCapacity = newCapacity * 2 / 3;
     }
 
-    return index;
+    printf ("%i ", newCapacity);
+    if (list -> capacity != newCapacity)
+    {
+        list -> data = (data_t*) realloc (list -> data, (newCapacity + 1) * sizeof (data_t));
+        list -> next = (int*) realloc (list -> next, (newCapacity + 1) * sizeof (int));
+        list -> prev = (int*) realloc (list -> prev, (newCapacity + 1) * sizeof (int));
+
+        if (list -> data == nullptr ||
+            list -> next == nullptr ||
+            list -> prev == nullptr)
+        {
+            list -> err.allocationError = 1;
+            return 0;
+        }
+
+        for (int i = list -> capacity + 1; i < newCapacity + 1; i ++)
+        {
+            list -> next[i] = -(i + 1);
+            list -> prev[i] = -1;
+            list -> data[i] = 0;
+        }
+        list -> next[newCapacity] = 0;
+
+        list -> free = list -> capacity + 1;
+
+
+        list -> capacity = newCapacity;
+    }
+
+    printf ("%i\n", newCapacity);
+
+    return newCapacity;
 }
 
 int SlowSlowVerySlow_ThereIsNoSenseToCallMe_ThinkHarder_LogicalIndexToPhysicalIndex (List* list, unsigned int logicalIndex)
