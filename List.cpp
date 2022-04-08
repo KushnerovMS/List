@@ -3,8 +3,10 @@
 #include <stdio.h>
 
 #include "List.h"
+#include "./lib/GraphDump.h"
+#include "./lib/Logs.h"
 
-List* ListCtr (int capacity, ListError* err)
+List* ListCtr (int capacity, int itemSize, ListError* err)
 {
     
     if (err)
@@ -18,7 +20,7 @@ List* ListCtr (int capacity, ListError* err)
         return nullptr;
     }
 
-    list -> data = (data_t*) calloc (capacity + 1, sizeof (data_t));
+    list -> data = (char*) calloc (capacity + 1, itemSize);
     list -> next = (int*) calloc (capacity + 1, sizeof (int)); 
     list -> prev = (int*) calloc (capacity + 1, sizeof (int)); 
 
@@ -40,11 +42,15 @@ List* ListCtr (int capacity, ListError* err)
     list -> free = 1;
     list -> capacity = capacity;
     list -> size = 0;
+    list -> itemSize = itemSize;
 
     list -> beginCanary = CANARY;
     list -> endCanary = CANARY;
 
-    if (err) list -> err = NULL_LIST_ERROR;
+    if (err)
+        list -> err = *err;
+    else
+        list -> err = NULL_LIST_ERROR;
 
     return list;
 }
@@ -54,13 +60,13 @@ ListError ListDtr (List* list)
     if (!ListOk (list))
         return list  -> err;
 
-    memset (list -> data, 0, list -> capacity * sizeof (data_t));
+    memset (list -> data, 0, (list -> capacity + 1) * list -> itemSize);
     free (list -> data);
 
-    memset (list -> next, 0, list -> capacity * sizeof (int));
+    memset (list -> next, 0, (list -> capacity + 1) * sizeof (int));
     free (list -> next);
 
-    memset (list -> prev, 0, list -> capacity * sizeof (int));
+    memset (list -> prev, 0, (list -> capacity + 1) * sizeof (int));
     free (list -> prev);
 
     ListError save = list -> err;
@@ -71,20 +77,21 @@ ListError ListDtr (List* list)
     list -> prev = nullptr;
     list -> free = 0;
     list -> capacity = -1;
+    list -> itemSize = -1;
     list -> err = NULL_LIST_ERROR;
-    list -> endCanary = -1;
+    list -> endCanary = 0;
     free (list);
 
     return save;
 }
 
 
-int ListInsert (List* list, data_t data, int index)
+int ListInsert (List* list, const void* data, int index)
 {
     if (!ListOk (list))
         return 0;
 
-    if (list -> size == list -> capacity && _listResize (list) == 0)
+    if (list -> size >= list -> capacity && _listResize (list) == 0)
         return 0;
 
 
@@ -98,7 +105,7 @@ int ListInsert (List* list, data_t data, int index)
     list -> free = - list -> next[free];
     
 
-    list -> data [free] = data;
+    memcpy (list -> data + free * list -> itemSize, data, list -> itemSize);
 
     list -> next[list -> prev[index]] = free;
     list -> prev[free] = list -> prev[index];
@@ -111,7 +118,7 @@ int ListInsert (List* list, data_t data, int index)
     return free;
 }
 
-int ListAdd (List* list, data_t data)
+int ListAdd (List* list, const void* data)
 {
     if (!ListOk (list))
         return 0;
@@ -119,13 +126,18 @@ int ListAdd (List* list, data_t data)
     if (list -> size == list -> capacity && _listResize (list) == 0)
         return 0;
 
-    printf ("ListAdd\n");
+    Logs.trace ("List add");
 
     int free = list -> free;
     list -> free = - list -> next[list -> free];
 
 
-    list -> data [free] = data;
+    Logs.trace ("list ptr = %p", list);
+    Logs.trace ("List -> data = %p", list -> data);
+    Logs.trace ("List -> free = %d", free);
+
+
+    memcpy (list -> data + free * list -> itemSize, data, list -> itemSize);
 
     list -> next[list -> prev[0]] = free;
     list -> prev[free] = list -> prev[0];
@@ -134,6 +146,8 @@ int ListAdd (List* list, data_t data)
     list -> prev[0] = free;
 
     list -> size ++;
+
+    Logs.trace ("list added");
 
 
     return free;
@@ -164,7 +178,7 @@ int ListDelete (List* list, int index)
 
     list -> next[index] = - list -> free;
     list -> prev[index] = -1;
-    list -> data[index] = 0;
+    memset (list -> data + index * list -> itemSize, 0, list -> itemSize);
 
     list -> free = index;
 
@@ -174,7 +188,7 @@ int ListDelete (List* list, int index)
 }
 
 
-int ListSet (List* list, data_t data, int index)
+int ListSet (List* list, const void* data, int index)
 {
     if (!ListOk (list))
         return 0;
@@ -186,12 +200,12 @@ int ListSet (List* list, data_t data, int index)
         return 0;
     }
 
-    list -> data[index] = data;
+    memcpy (list -> data + index * list -> itemSize,  data, list -> itemSize);
 
     return index;
 }
 
-data_t ListGet (List* list, int index)
+void* ListGet (List* list, int index)
 {
     if (!ListOk (list))
         return 0;
@@ -203,68 +217,174 @@ data_t ListGet (List* list, int index)
         return 0;
     }
 
-    return list -> data[index];
+    return list -> data + index * list -> itemSize;
 }
 
-
-bool ListDump (List* list)
+/*
+bool ListDump (List* list, void (*datadump) (FILE* file, const void* item))
 {
-    system ("mkdir -p ./dump");
-    FILE* file = fopen ("./dump/test.dot", "w");
+    Graph* graph = GraphOpen ();
+    ListDump (list, graph -> file, datadump);
 
-    fprintf (file, "digraph G{\n");
+    char* buff = (char*) calloc (7 + sizeof (void*) * 2, sizeof (char));
+    sprintf (buff, "%p.svg", list);
 
-    fprintf (file, "graph [rankdir = LR];\
-                    edge [weight = 100, minlen = 2];\n"); 
+    GraphDraw (graph, buff, "svg");
 
-    for (int i = 0; i < list -> capacity + 1; i ++)
-    {
-        fprintf (file, "subgraph cluster%d                          \
-                        {                                           \
-                            style = \"filled, rounded\";            \
-                            fillcolor = \"#b0ffb0\";                \
-                            color = \"#b0ffb0\";                    \
-                                                                    \
-                            label = \"%d\"                          \
-                                                                    \
-                            item%d                                  \
-                            [                                       \
-                                style = \"rounded, filled\",        \
-                                fillcolor = \"#ffffff\",            \
-                                shape = \"record\",                 \
-                                label = \"<addr> addr: %d |         \
-                                          <next> next: %d |         \
-                                          <prev> prev: %d |         \
-                                          <data> data: %d\"         \
-                            ];                                      \
-                        }\n", i, i, i, i, list -> next[i], list -> prev[i], list -> data[i]);
-        if (i + 1 < list -> capacity + 1)
-            fprintf (file, "item%d -> item%d [style = invis];\n", i, i + 1);
-    }
-
-    fprintf (file, "edge [weight = 1, minlen = 0];\n");
-
-    for (int i = 0; i < list -> capacity + 1; i ++)
-    {
-        if (list -> next[i] >= 0)
-            fprintf (file, "item%d : next -> item%d : addr;\n", i, list -> next[i]);
-        else
-            fprintf (file, "item%d : next -> item%d : addr;\n", i, - list -> next[i]);
-
-        if (list -> prev[i] >= 0)
-            fprintf (file, "item%d : prev -> item%d : addr;\n", i, list -> prev[i]);
-    }
-
-    fprintf (file, "free -> item%d\n", list -> free);
-
-    fprintf (file, "}\n");
-
-    fclose (file);
-
-    system ("dot ./dump/test.dot -T svg -o ./dump/test.svg");
-
+    free (buff);
 
     return 1;
+}
+*/
+
+bool ListDump (List* list, void (*dump) (FILE* file, const void* item), const char* fileName)
+{
+    bool ok = ListOk (list);
+
+    Graph* graph = GraphOpen ();
+
+    fprintf (graph -> file, "rankdir = LR\n");
+//    fprintf (file, "nodesep = 1\n");
+
+    GraphNode node = {};
+    node.id = list;
+    if (ok)
+        node.color = 0x90ff90;
+    else
+        node.color = 0xff9090;
+    node.rounded = 1;
+    node.shape = RECORD_SHAPE;
+
+    GraphBeginCluster (graph, &node);
+    node.color = 0xffffff;
+    GraphAddNode (graph, &node, 
+        "beginCanary: %d|"
+        "<data>data: %p|"
+        "<next>next: %p|"
+        "<prev>prev: %p|"
+        "<free>free: %d|"
+        "capacity: %d|"
+        "itemSize: %d|"
+        "size: %d|"
+        "endCanary: %d",
+        list -> beginCanary,
+        list -> data,
+        list -> next,
+        list -> prev,
+        list -> free,
+        list -> capacity,
+        list -> itemSize,
+        list -> size,
+        list -> endCanary);
+    GraphEndCluster (graph);
+
+    GraphEdge edge = {};
+
+    GraphAddEdge (graph, &edge, node.id, "", list -> next, "", 1, "");
+
+    int i = 0;
+    node.color = 0xb0b0b0;
+    do
+    {
+        node.id = list -> next + i;
+        GraphBeginCluster (graph, &node, "%d", i);
+
+        node.color = 0xffffff;
+        GraphAddNode (graph, &node);
+
+        long pos = ftell (graph -> file);
+
+        dump (graph -> file, list -> data + i * list -> itemSize);
+
+        pos = ftell (graph -> file) - pos;
+
+        if (pos == 0)
+            fprintf (graph -> file, "<data>data");
+
+        fprintf (graph -> file,
+            "|<next>next: %d|"
+            "<prev>prev: %d"
+            "\"]\n",
+            list -> next[i],
+            list -> prev[i]);
+
+        GraphEndCluster (graph);
+
+        if (pos == 0)
+        {
+            GraphAddImage (graph, list -> data + i * list -> itemSize);
+            GraphAddEdge (graph, &edge, node.id, ":data", list -> data + i * list -> itemSize, "", 1, "");
+        }
+            
+
+        if (list -> next[i] != 0)
+            GraphStreamlineNodes (graph, node.id, list -> next + list -> next[i]);
+        GraphAddEdge (graph, &edge, node.id, ":next", list -> next + list -> next[i], ":prev", 0, "");
+
+        i = list -> next[i];
+
+        node.color = 0x90ff90;
+    } while (i != 0);
+
+    GraphAddEdge (graph, &edge, list, ":free", list -> next + list -> free, "", 1, "");
+
+    i = -list -> free;
+    do
+    {
+        node.color = 0xff9090;
+        node.id = list -> next - i;
+        GraphBeginCluster (graph, &node, "%d", i);
+
+        node.color = 0xffffff;
+        GraphAddNode (graph, &node);
+
+        long pos = ftell (graph -> file);
+
+        dump (graph -> file, list -> data - i * list -> itemSize);
+
+        pos = ftell (graph -> file) - pos;
+
+        if (pos == 0)
+            fprintf (graph -> file, "<data>data");
+
+        fprintf (graph -> file,
+            "|<next>next: %d|"
+            "<prev>prev: %d"
+            "\"]\n",
+            list -> next[-i],
+            list -> prev[-i]);
+
+        GraphEndCluster (graph);
+
+        if (pos == 0)
+        {
+            GraphAddImage (graph, list -> data - i * list -> itemSize);
+            GraphAddEdge (graph, &edge, node.id, ":data", list -> data - i * list -> itemSize, "", 1, "");
+        }
+
+
+        if (list -> next[-i] != 0)
+            GraphStreamlineNodes (graph, node.id, list -> next - list -> next[-i]);
+        GraphAddEdge (graph, &edge, node.id, ":next", list -> next - list -> next[-i], ":prev", 0, "");
+
+        i = list -> next[-i];
+    } while (i != 0);
+
+    i = 0;
+
+    if (fileName == nullptr)
+    {
+        char* pointerName = (char*) calloc (7 + sizeof (void*) * 2, sizeof (char));
+        sprintf (pointerName, "%p.svg", list);
+        
+        GraphDraw (graph, pointerName, "svg");
+
+        free (pointerName);
+    }
+    else
+        GraphDraw (graph, fileName, "svg");
+
+    return ok;
 }
 
 bool ListOk (List* list)
@@ -351,6 +471,7 @@ void ListErrPrint (ListError err, FILE* file)
 
 int _listResize (List* list)
 {
+    Logs.trace ("called _listResize");
     int newCapacity = list -> capacity;
 
     printf ("%i ", newCapacity);
@@ -379,7 +500,7 @@ int _listResize (List* list)
     printf ("%i ", newCapacity);
     if (list -> capacity != newCapacity)
     {
-        list -> data = (data_t*) realloc (list -> data, (newCapacity + 1) * sizeof (data_t));
+        list -> data = (char*) realloc (list -> data, (newCapacity + 1) * list -> itemSize);
         list -> next = (int*) realloc (list -> next, (newCapacity + 1) * sizeof (int));
         list -> prev = (int*) realloc (list -> prev, (newCapacity + 1) * sizeof (int));
 
@@ -395,7 +516,7 @@ int _listResize (List* list)
         {
             list -> next[i] = -(i + 1);
             list -> prev[i] = -1;
-            list -> data[i] = 0;
+            memset (list -> data + i * list -> itemSize, 0, list -> itemSize);
         }
         list -> next[newCapacity] = 0;
 
@@ -408,6 +529,18 @@ int _listResize (List* list)
     printf ("%i\n", newCapacity);
 
     return newCapacity;
+}
+
+int ListFindItem   (List* list, const void* key, int (*cmp) (const void* val, const void* key))
+{
+    for (int i = list -> next[0]; i != 0; i = list -> next[i])
+    {
+        printf ("data[%d] = %d\n", i, *((const int*)(list -> data + i * list -> itemSize)));
+        if (cmp (list -> data + i * list -> itemSize, key))
+            return i;
+    }
+
+    return 0;
 }
 
 int SlowSlowVerySlow_ThereIsNoSenseToCallMe_ThinkHarder_LogicalIndexToPhysicalIndex (List* list, unsigned int logicalIndex)
