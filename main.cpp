@@ -1,7 +1,7 @@
 #include <stdio.h>
 
 #include "List.h"
-#include "./lib/GraphDump.h"
+#include <kms/GraphDump.h>
 
 
 int mycmp (const void* a, const void* b)

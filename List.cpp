@@ -3,12 +3,11 @@
 #include <stdio.h>
 
 #include "List.h"
-#include "./lib/GraphDump.h"
-#include "./lib/Logs.h"
+#include <kms/GraphDump.h>
+#include <kms/Logs.h>
 
 List* ListCtr (int capacity, int itemSize, ListError* err)
 {
-    
     if (err)
         *err = NULL_LIST_ERROR;
     

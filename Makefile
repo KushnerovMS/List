@@ -1,4 +1,5 @@
-CC=g++
+RM=rm -r -d
+
 SANFLAGS=-fsanitize=address,alignment,bool,bounds,enum,float-cast-overflow,float-divide-by-zero,integer-divide-by-zero,leak,nonnull-attribute,null,object-size,return,returns-nonnull-attribute,shift,signed-integer-overflow,undefined,unreachable,vla-bound,vptr
 
 CFLAGS=-D _DEBUG -ggdb3 -std=c++2a -O0 -Wall -Wextra -Weffc++ -Waggressive-loop-optimizations   \
@@ -20,29 +21,46 @@ OBJDIR =./.obj
 OBJECTS=$(patsubst %.cpp, $(OBJDIR)/%.o, $(SOURCES))
 EXECUTABLE=List
 EXEDIR=./bin
-LIBRARIES=libLogs.a libGraphDump.a
-LIBDIR=./lib
+LIBRARIES=kms/libLogs.a kms/libGraphDump.a
+
+COMAPANY=kms
+
+LIBDIR=/lib
+HEADERDIR=/usr/include
 
 
 $(EXECUTABLE): $(OBJECTS) $(EXEDIR)
-	$(CC) $(SANFLAGS) $(OBJECTS) -o $(EXEDIR)/$@ -L $(LIBDIR) $(patsubst lib%.a, -l%, $(LIBRARIES))
+	$(CXX) $(SANFLAGS) $(OBJECTS) -o $(EXEDIR)/$@ \
+		$(addprefix -L$(LIBDIR)/, $(sort $(dir $(LIBRARIES)))) \
+		$(patsubst lib%.a, -l%, $(notdir $(LIBRARIES)))
 
 
-$(OBJECTS) : $(OBJDIR)/%.o : %.cpp $(OBJDIR) 
-	$(CC) -c $(CFLAGS) $< -o $@
+$(OBJECTS) : $(OBJDIR)/%.o : %.cpp
+	mkdir -p $(@D)
+	$(CXX) -c $(CFLAGS) $< -o $@ \
+		$(addprefix -L$(LIBDIR)/, $(sort $(dir $(LIBRARIES)))) \
+		$(patsubst lib%.a, -l%, $(notdir $(LIBRARIES)))
 
 lib$(EXECUTABLE).a : $(filter-out $(OBJDIR)/main.o, $(OBJECTS))
-	ar r lib$(EXECUTABLE).a $(filter-out $(OBJDIR)/main.o, $(OBJECTS))
+	$(AR) r lib$(EXECUTABLE).a $(filter-out $(OBJDIR)/main.o, $(OBJECTS))
+
+
+libInstall : lib$(EXECUTABLE).a $(LIBDIR)/$(COMAPANY)/ $(HEADERDIR)/$(COMAPANY)/
+	sudo cp -f lib$(EXECUTABLE).a $(LIBDIR)/$(COMAPANY)/
+	sudo cp -f $(EXECUTABLE).h 	 $(HEADERDIR)/$(COMAPANY)/
+
+$(LIBDIR)/$(COMAPANY)/ :
+	sudo mkdir $(LIBDIR)/$(COMAPANY)/
+
+$(HEADERDIR)/$(COMAPANY)/ :
+	sudo mkdir $(HEADERDIR)/$(COMAPANY)/
+
 
 $(EXEDIR) :
 	mkdir $(EXEDIR)
 
-$(OBJDIR) :
-	mkdir $(OBJDIR)
-
 clear:
-	rm -r -d $(OBJDIR)
+	$(RM) $(OBJDIR)
 
 run : $(EXECUTABLE)
-	
 	$(EXEDIR)/$(EXECUTABLE)
